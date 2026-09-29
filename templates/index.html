@@ -1,0 +1,2877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Smart Maintenance 3D</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+    <style>
+        .scene-container {
+            position: relative;
+            width: 100%;
+            height: 430px;
+            min-height: 430px;
+            overflow: hidden;
+            border-radius: 12px;
+            background: #071018;
+        }
+
+        #factoryCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .scene-loading {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            color: #9fb0bd;
+            font-size: 14px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .scene-hint {
+            position: absolute;
+            right: 18px;
+            bottom: 15px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: rgba(5, 12, 18, 0.82);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: #aebbc5;
+            font-size: 11px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .machine-label {
+            position: absolute;
+            pointer-events: none;
+            color: white;
+            background: rgba(3, 9, 14, 0.86);
+            border: 1px solid rgba(255,255,255,0.16);
+            border-radius: 6px;
+            padding: 4px 7px;
+            font-size: 10px;
+            white-space: nowrap;
+            transform: translate(-50%, -100%);
+            display: none;
+        }
+
+        @media (max-width: 900px) {
+            .scene-container {
+                height: 360px;
+                min-height: 360px;
+            }
+        }
+    </style>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+        }
+    }
+    </script>
+</head>
+
+<body>
+
+<div class="app">
+
+    <!-- =========================================================
+         SIDEBAR
+         ========================================================= -->
+
+    <aside class="sidebar">
+
+        <div class="brand">
+            <div class="brand-icon">⚙</div>
+
+            <div>
+                <div class="brand-title">SMART</div>
+                <div class="brand-subtitle">MAINTENANCE</div>
+            </div>
+        </div>
+
+        <div class="sidebar-section-title">
+            MACHINES
+        </div>
+
+        <div class="machine-list">
+
+            {% for machine in machines %}
+
+            <button
+                class="machine-item"
+                id="machine-button-{{ machine.Machine_ID }}"
+                data-machine-id="{{ machine.Machine_ID }}"
+                onclick="selectMachine({{ machine.Machine_ID }})"
+            >
+
+                <span
+                    class="machine-status
+                    {% if machine.Status == 'Under Maintenance' %}
+                        maintenance
+                    {% elif machine.Status == 'Breakdown' %}
+                        alert
+                    {% else %}
+                        running
+                    {% endif %}">
+                </span>
+
+                <span class="machine-item-text">
+
+                    <strong>
+                        {{ machine.Machine_Name }}
+                    </strong>
+
+                    <small>
+                        {{ machine.Machine_Type }}
+                    </small>
+
+                </span>
+
+                <span class="machine-arrow">›</span>
+
+            </button>
+
+            {% endfor %}
+
+        </div>
+
+        <div class="sidebar-footer">
+
+            <div class="online-indicator">
+                <span></span>
+                SYSTEM ONLINE
+            </div>
+
+            <small>
+                Predictive Maintenance Platform
+            </small>
+
+        </div>
+
+    </aside>
+
+
+    <!-- =========================================================
+         MAIN
+         ========================================================= -->
+
+    <main class="main">
+
+        <!-- TOP BAR -->
+
+        <header class="topbar">
+
+            <div>
+
+                <div class="breadcrumb">
+                    FACTORY / 3D MONITORING
+                </div>
+
+                <h1>
+                    Industrial Factory
+                </h1>
+
+            </div>
+
+            <div class="live-status">
+                <span></span>
+                LIVE MONITORING
+            </div>
+
+        </header>
+
+
+        <!-- =====================================================
+             3D FACTORY
+             ===================================================== -->
+
+        <section class="scene-card">
+
+            <div class="scene-title">
+
+                <strong>
+                    3D FACTORY ENVIRONMENT
+                </strong>
+
+                <span>
+                    Interactive maintenance visualization
+                </span>
+
+            </div>
+
+            <div
+                id="sceneContainer"
+                class="scene-container"
+            >
+
+                <div
+                    id="sceneLoading"
+                    class="scene-loading"
+                >
+                    Loading factory...
+                </div>
+
+                <canvas
+                    id="factoryCanvas"
+                ></canvas>
+
+                <div class="scene-hint">
+                    Drag = Rotate&nbsp;&nbsp;•&nbsp;&nbsp;
+                    Scroll = Zoom&nbsp;&nbsp;•&nbsp;&nbsp;
+                    Click = Select Machine
+                </div>
+
+            </div>
+
+            <div class="legend">
+
+                <span>
+                    <i class="legend-dot running"></i>
+                    Running
+                </span>
+
+                <span>
+                    <i class="legend-dot maintenance"></i>
+                    Maintenance
+                </span>
+
+                <span>
+                    <i class="legend-dot alert"></i>
+                    Alert
+                </span>
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             MACHINE INFORMATION
+             ===================================================== -->
+
+        <section class="machine-info">
+
+            <div class="machine-info-heading">
+
+                <div>
+
+                    <div class="selected-label">
+                        SELECTED MACHINE
+                    </div>
+
+                    <h2 id="selectedMachineName">
+                        Loading...
+                    </h2>
+
+                    <p id="selectedMachineType">
+                        -
+                    </p>
+
+                </div>
+
+                <div
+                    id="selectedMachineStatus"
+                    class="machine-status-badge"
+                >
+                    <span></span>
+                    Running
+                </div>
+
+            </div>
+
+
+            <div class="info-grid">
+
+                <div class="info-box">
+
+                    <div class="info-icon">
+                        📍
+                    </div>
+
+                    <div>
+                        <small>LOCATION</small>
+                        <strong id="machineLocation">-</strong>
+                    </div>
+
+                </div>
+
+
+                <div class="info-box">
+
+                    <div class="info-icon">
+                        ⏱
+                    </div>
+
+                    <div>
+                        <small>OPERATING HOURS</small>
+                        <strong id="machineHours">-</strong>
+                    </div>
+
+                </div>
+
+
+                <div class="info-box">
+
+                    <div class="info-icon">
+                        📅
+                    </div>
+
+                    <div>
+                        <small>INSTALLATION DATE</small>
+                        <strong id="machineInstallation">-</strong>
+                    </div>
+
+                </div>
+
+
+                <div class="info-box">
+
+                    <div class="info-icon">
+                        🌡
+                    </div>
+
+                    <div>
+                        <small>TEMPERATURE</small>
+                        <strong id="machineTemperature">-</strong>
+                    </div>
+
+                </div>
+
+
+                <div class="info-box">
+
+                    <div class="info-icon">
+                        〽
+                    </div>
+
+                    <div>
+                        <small>VIBRATION</small>
+                        <strong id="machineVibration">-</strong>
+                    </div>
+
+                </div>
+
+
+                <div class="info-box">
+
+                    <div class="info-icon">
+                        ◉
+                    </div>
+
+                    <div>
+                        <small>PRESSURE</small>
+                        <strong id="machinePressure">-</strong>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<!-- =============================================================
+     THREE.JS
+     ============================================================= -->
+
+<script type="module">
+
+import * as THREE from "three";
+
+import { OrbitControls } from
+    "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js";
+    import { GLTFLoader } from
+    "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js";
+
+
+/* =============================================================
+   DATABASE DATA
+   ============================================================= */
+
+const machineData =
+    {{ machines | tojson }};
+
+
+/* =============================================================
+   DOM
+   ============================================================= */
+
+const container =
+    document.getElementById("sceneContainer");
+
+const canvas =
+    document.getElementById("factoryCanvas");
+
+const loading =
+    document.getElementById("sceneLoading");
+
+
+/* =============================================================
+   SCENE
+   ============================================================= */
+
+const scene =
+    new THREE.Scene();
+
+scene.background =
+    new THREE.Color(0x071018);
+
+
+/* =============================================================
+   CAMERA
+   ============================================================= */
+
+const camera =
+    new THREE.PerspectiveCamera(
+        42,
+        1,
+        0.1,
+        500
+    );
+
+camera.position.set(
+    62,
+    55,
+    70
+);
+
+
+/* =============================================================
+   RENDERER
+   ============================================================= */
+
+const renderer =
+    new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        powerPreference: "high-performance"
+    });
+
+renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio, 2)
+);
+
+renderer.outputColorSpace =
+    THREE.SRGBColorSpace;
+
+renderer.toneMapping =
+    THREE.ACESFilmicToneMapping;
+
+renderer.toneMappingExposure =
+    1.05;
+
+renderer.shadowMap.enabled =
+    true;
+
+renderer.shadowMap.type =
+    THREE.PCFSoftShadowMap;
+
+
+/* =============================================================
+   CONTROLS
+   ============================================================= */
+
+const controls =
+    new OrbitControls(
+        camera,
+        renderer.domElement
+    );
+
+controls.enableDamping =
+    true;
+
+controls.dampingFactor =
+    0.06;
+
+controls.minDistance =
+    32;
+
+controls.maxDistance =
+    145;
+
+controls.maxPolarAngle =
+    Math.PI * 0.46;
+
+controls.minPolarAngle =
+    Math.PI * 0.15;
+
+controls.target.set(
+    0,
+    3,
+    0
+);
+
+
+/* =============================================================
+   LIGHTING
+   ============================================================= */
+
+const ambient =
+    new THREE.HemisphereLight(
+        0xbfdcff,
+        0x101820,
+        1.6
+    );
+
+scene.add(ambient);
+
+
+const mainLight =
+    new THREE.DirectionalLight(
+        0xffffff,
+        2.4
+    );
+
+mainLight.position.set(
+    15,
+    70,
+    25
+);
+
+mainLight.castShadow =
+    true;
+
+mainLight.shadow.mapSize.width =
+    2048;
+
+mainLight.shadow.mapSize.height =
+    2048;
+
+mainLight.shadow.camera.left =
+    -70;
+
+mainLight.shadow.camera.right =
+    70;
+
+mainLight.shadow.camera.top =
+    70;
+
+mainLight.shadow.camera.bottom =
+    -70;
+
+scene.add(mainLight);
+
+
+const fillLight =
+    new THREE.DirectionalLight(
+        0x78a8c9,
+        0.8
+    );
+
+fillLight.position.set(
+    -50,
+    30,
+    -40
+);
+
+scene.add(fillLight);
+
+
+/* =============================================================
+   MATERIALS
+   ============================================================= */
+
+const floorMaterial =
+    new THREE.MeshStandardMaterial({
+        color: 0x18232a,
+        roughness: 0.88,
+        metalness: 0.12
+    });
+
+
+const platformMaterial =
+    new THREE.MeshStandardMaterial({
+        color: 0x2b373d,
+        roughness: 0.76,
+        metalness: 0.2
+    });
+
+
+const steelMaterial =
+    new THREE.MeshStandardMaterial({
+        color: 0x35444c,
+        roughness: 0.55,
+        metalness: 0.72
+    });
+
+
+const darkSteel =
+    new THREE.MeshStandardMaterial({
+        color: 0x10181d,
+        roughness: 0.48,
+        metalness: 0.8
+    });
+
+
+const yellowMaterial =
+    new THREE.MeshStandardMaterial({
+        color: 0xe0a900,
+        roughness: 0.55,
+        metalness: 0.35
+    });
+
+
+const blueMaterial =
+    new THREE.MeshStandardMaterial({
+        color: 0x176b9f,
+        roughness: 0.52,
+        metalness: 0.45
+    });
+
+
+const redMaterial =
+    new THREE.MeshStandardMaterial({
+        color: 0xb72b25,
+        roughness: 0.58,
+        metalness: 0.32
+    });
+
+
+const whiteMaterial =
+    new THREE.MeshStandardMaterial({
+        color: 0xbfc9ce,
+        roughness: 0.62,
+        metalness: 0.38
+    });
+
+
+const glassMaterial =
+    new THREE.MeshStandardMaterial({
+        color: 0x173b50,
+        transparent: true,
+        opacity: 0.7,
+        roughness: 0.2,
+        metalness: 0.25
+    });
+
+
+/* =============================================================
+   HELPERS
+   ============================================================= */
+
+function addBox(
+    parent,
+    x,
+    y,
+    z,
+    width,
+    height,
+    depth,
+    material
+) {
+
+    const geometry =
+        new THREE.BoxGeometry(
+            width,
+            height,
+            depth
+        );
+
+    const mesh =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+    mesh.position.set(
+        x,
+        y,
+        z
+    );
+
+    mesh.castShadow =
+        true;
+
+    mesh.receiveShadow =
+        true;
+
+    parent.add(mesh);
+
+    return mesh;
+}
+
+
+function addCylinder(
+    parent,
+    x,
+    y,
+    z,
+    radius,
+    height,
+    material,
+    segments = 20
+) {
+
+    const geometry =
+        new THREE.CylinderGeometry(
+            radius,
+            radius,
+            height,
+            segments
+        );
+
+    const mesh =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+    mesh.position.set(
+        x,
+        y,
+        z
+    );
+
+    mesh.castShadow =
+        true;
+
+    mesh.receiveShadow =
+        true;
+
+    parent.add(mesh);
+
+    return mesh;
+}
+
+
+/* =============================================================
+   MAIN FACTORY FLOOR
+   ============================================================= */
+
+addBox(
+    scene,
+    0,
+    -1.2,
+    0,
+    86,
+    2.4,
+    64,
+    floorMaterial
+);
+
+
+/* =============================================================
+   FLOOR GRID
+   ============================================================= */
+
+const grid =
+    new THREE.GridHelper(
+        84,
+        28,
+        0x45545c,
+        0x253139
+    );
+
+grid.position.y =
+    0.03;
+
+scene.add(grid);
+
+
+/* =============================================================
+   RAISED PLATFORMS
+   ============================================================= */
+
+const platforms = [
+
+    {
+        x: -24,
+        z: -17,
+        w: 22,
+        d: 16,
+        h: 2.4
+    },
+
+    {
+        x: 2,
+        z: -17,
+        w: 24,
+        d: 16,
+        h: 1.6
+    },
+
+    {
+        x: 29,
+        z: -17,
+        w: 18,
+        d: 16,
+        h: 2.8
+    },
+
+    {
+        x: -24,
+        z: 12,
+        w: 22,
+        d: 15,
+        h: 1.7
+    },
+
+    {
+        x: 2,
+        z: 12,
+        w: 24,
+        d: 15,
+        h: 2.3
+    },
+
+    {
+        x: 29,
+        z: 12,
+        w: 18,
+        d: 15,
+        h: 1.2
+    }
+
+];
+
+
+platforms.forEach(
+    platform => {
+
+        addBox(
+            scene,
+            platform.x,
+            platform.h / 2,
+            platform.z,
+            platform.w,
+            platform.h,
+            platform.d,
+            platformMaterial
+        );
+
+        /* platform border */
+
+        const borderMaterial =
+            new THREE.MeshStandardMaterial({
+                color: 0x3f4d54,
+                roughness: 0.6,
+                metalness: 0.55
+            });
+
+        addBox(
+            scene,
+            platform.x,
+            platform.h + 0.12,
+            platform.z - platform.d / 2 + 0.12,
+            platform.w,
+            0.18,
+            0.18,
+            borderMaterial
+        );
+
+        addBox(
+            scene,
+            platform.x,
+            platform.h + 0.12,
+            platform.z + platform.d / 2 - 0.12,
+            platform.w,
+            0.18,
+            0.18,
+            borderMaterial
+        );
+
+    }
+);
+
+
+/* =============================================================
+   FACTORY WALLS
+   ============================================================= */
+
+addBox(
+    scene,
+    -43,
+    12,
+    0,
+    1.4,
+    25,
+    66,
+    darkSteel
+);
+
+addBox(
+    scene,
+    43,
+    12,
+    0,
+    1.4,
+    25,
+    66,
+    darkSteel
+);
+
+addBox(
+    scene,
+    0,
+    12,
+    -32,
+    86,
+    25,
+    1.4,
+    darkSteel
+);
+
+addBox(
+    scene,
+    0,
+    12,
+    32,
+    86,
+    25,
+    1.4,
+    darkSteel
+);
+
+
+/* =============================================================
+   FACTORY COLUMNS
+   ============================================================= */
+
+for (
+    let x = -36;
+    x <= 36;
+    x += 12
+) {
+
+    addBox(
+        scene,
+        x,
+        13,
+        -29,
+        0.9,
+        26,
+        0.9,
+        steelMaterial
+    );
+
+    addBox(
+        scene,
+        x,
+        13,
+        29,
+        0.9,
+        26,
+        0.9,
+        steelMaterial
+    );
+
+}
+
+
+/* =============================================================
+   ROOF BEAMS
+   ============================================================= */
+
+for (
+    let x = -36;
+    x <= 36;
+    x += 12
+) {
+
+    addBox(
+        scene,
+        x,
+        25,
+        0,
+        0.8,
+        0.8,
+        62,
+        darkSteel
+    );
+
+}
+
+
+for (
+    let z = -24;
+    z <= 24;
+    z += 12
+) {
+
+    addBox(
+        scene,
+        0,
+        25,
+        z,
+        84,
+        0.8,
+        0.8,
+        darkSteel
+    );
+
+}
+
+
+/* =============================================================
+   CEILING LIGHTS
+   ============================================================= */
+
+for (
+    let x = -30;
+    x <= 30;
+    x += 15
+) {
+
+    for (
+        let z = -18;
+        z <= 18;
+        z += 18
+    ) {
+
+        addBox(
+            scene,
+            x,
+            23.8,
+            z,
+            5,
+            0.15,
+            1,
+            whiteMaterial
+        );
+
+        const light =
+            new THREE.PointLight(
+                0xeaf6ff,
+                3,
+                22
+            );
+
+        light.position.set(
+            x,
+            22.5,
+            z
+        );
+
+        scene.add(light);
+
+    }
+
+}
+
+
+/* =============================================================
+   SAFETY RAILS
+   ============================================================= */
+
+function createSafetyRail(
+    x,
+    y,
+    z,
+    length,
+    rotation = 0
+) {
+
+    const group =
+        new THREE.Group();
+
+    group.position.set(
+        x,
+        y,
+        z
+    );
+
+    group.rotation.y =
+        rotation;
+
+    const rail =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                length,
+                0.18,
+                0.18
+            ),
+            yellowMaterial
+        );
+
+    rail.position.y =
+        1.25;
+
+    group.add(rail);
+
+
+    const lower =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                length,
+                0.14,
+                0.14
+            ),
+            yellowMaterial
+        );
+
+    lower.position.y =
+        0.65;
+
+    group.add(lower);
+
+
+    for (
+        let i = -length / 2;
+        i <= length / 2;
+        i += 3
+    ) {
+
+        const post =
+            new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    0.15,
+                    1.5,
+                    0.15
+                ),
+                yellowMaterial
+            );
+
+        post.position.set(
+            i,
+            0.75,
+            0
+        );
+
+        group.add(post);
+
+    }
+
+    scene.add(group);
+
+}
+
+
+createSafetyRail(
+    -24,
+    2.4,
+    -24.5,
+    18
+);
+
+createSafetyRail(
+    2,
+    1.6,
+    -24.5,
+    18
+);
+
+createSafetyRail(
+    29,
+    2.8,
+    -24.5,
+    14
+);
+
+createSafetyRail(
+    -24,
+    1.7,
+    19,
+    18
+);
+
+createSafetyRail(
+    2,
+    2.3,
+    19,
+    18
+);
+
+
+/* =============================================================
+   MACHINE GROUPS
+   ============================================================= */
+
+const machineGroups = {};
+
+const clickableObjects = [];
+
+
+/* =============================================================
+   MACHINE BASE
+   ============================================================= */
+
+function machineBase(
+    id,
+    x,
+    y,
+    z
+) {
+
+    const group =
+        new THREE.Group();
+
+    group.position.set(
+        x,
+        y,
+        z
+    );
+
+    group.userData.machineId =
+        id;
+
+    scene.add(group);
+
+    machineGroups[id] =
+        group;
+
+    return group;
+}
+
+
+/* =============================================================
+   CNC MACHINE
+   ============================================================= */
+
+function createCNC(machine) {
+    const group = machineBase(
+        machine.Machine_ID,
+        -24,
+        2.4,
+        -17
+    );
+
+    addBox(
+        group,
+        0,
+        0.22,
+        0,
+        11,
+        0.35,
+        8,
+        darkSteel
+    );
+
+    clickableObjects.push(group);
+
+    const loader = new GLTFLoader();
+
+    loader.load(
+        "{{ url_for('static', filename='models/model.glb') }}",
+
+        function(gltf) {
+            const model = gltf.scene;
+
+            const initialBox =
+                new THREE.Box3().setFromObject(model);
+
+            const initialSize =
+                new THREE.Vector3();
+
+            initialBox.getSize(initialSize);
+
+            const largestDimension =
+                Math.max(
+                    initialSize.x,
+                    initialSize.y,
+                    initialSize.z
+                );
+
+            if (largestDimension > 0) {
+                const desiredSize = 9;
+
+                model.scale.setScalar(
+                    desiredSize / largestDimension
+                );
+            }
+
+            const box =
+                new THREE.Box3().setFromObject(model);
+
+            const center =
+                new THREE.Vector3();
+
+            box.getCenter(center);
+
+            model.position.x -= center.x;
+            model.position.z -= center.z;
+            model.position.y -= box.min.y;
+
+            model.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+
+                    if (child.material) {
+                        child.material.needsUpdate = true;
+                    }
+                }
+            });
+
+            group.add(model);
+
+            group.userData.realModel = model;
+
+            console.log(
+                "Real CNC GLB loaded successfully."
+            );
+        },
+
+        undefined,
+
+        function(error) {
+            console.error(
+                "Unable to load CNC GLB model:",
+                error
+            );
+        }
+    );
+}
+
+/* =============================================================
+   LATHE
+   ============================================================= */
+
+function createLathe(
+    machine
+) {
+
+    const group =
+        machineBase(
+            machine.Machine_ID,
+            2,
+            1.6,
+            -17
+        );
+
+    addBox(
+        group,
+        0,
+        1.3,
+        0,
+        11,
+        2.2,
+        4.5,
+        blueMaterial
+    );
+
+    addBox(
+        group,
+        0,
+        2.55,
+        0,
+        8,
+        0.3,
+        3.4,
+        darkSteel
+    );
+
+    for (
+        let i = -3;
+        i <= 3;
+        i += 2
+    ) {
+
+        const wheel =
+            addCylinder(
+                group,
+                i,
+                1.9,
+                0,
+                0.8,
+                0.4,
+                steelMaterial,
+                24
+            );
+
+        wheel.rotation.z =
+            Math.PI / 2;
+
+        wheel.userData.rotating =
+            true;
+
+    }
+
+    addBox(
+        group,
+        0,
+        0.35,
+        0,
+        12,
+        0.4,
+        5,
+        darkSteel
+    );
+
+    clickableObjects.push(
+        group
+    );
+
+}
+
+
+/* =============================================================
+   MILLING MACHINE
+   ============================================================= */
+
+function createMilling(
+    machine
+) {
+
+    const group =
+        machineBase(
+            machine.Machine_ID,
+            29,
+            2.8,
+            -17
+        );
+
+    addBox(
+        group,
+        0,
+        2.2,
+        0,
+        7,
+        4.3,
+        6,
+        blueMaterial
+    );
+
+    addBox(
+        group,
+        0,
+        5,
+        0,
+        7.8,
+        0.35,
+        6.5,
+        darkSteel
+    );
+
+    addBox(
+        group,
+        0,
+        2.6,
+        3.1,
+        4.5,
+        2.8,
+        0.18,
+        glassMaterial
+    );
+
+    const cutter =
+        addCylinder(
+            group,
+            0,
+            5.5,
+            0,
+            0.45,
+            2.2,
+            yellowMaterial
+        );
+
+    cutter.userData.rotating =
+        true;
+
+    clickableObjects.push(
+        group
+    );
+
+}
+
+
+/* =============================================================
+   COMPRESSOR
+   ============================================================= */
+
+function createCompressor(
+    machine
+) {
+
+    const group =
+        machineBase(
+            machine.Machine_ID,
+            -24,
+            1.7,
+            12
+        );
+
+    addBox(
+        group,
+        0,
+        1.4,
+        0,
+        7,
+        2.8,
+        4.5,
+        redMaterial
+    );
+
+    addCylinder(
+        group,
+        -2.2,
+        2.8,
+        0,
+        1.4,
+        3.4,
+        whiteMaterial,
+        32
+    );
+
+    addCylinder(
+        group,
+        2.2,
+        2.8,
+        0,
+        1.4,
+        3.4,
+        whiteMaterial,
+        32
+    );
+
+    addCylinder(
+        group,
+        0,
+        4.8,
+        0,
+        0.5,
+        2.2,
+        darkSteel
+    );
+
+    clickableObjects.push(
+        group
+    );
+
+}
+
+
+/* =============================================================
+   ROBOT
+   ============================================================= */
+
+function createRobot(
+    machine
+) {
+
+    const group =
+        machineBase(
+            machine.Machine_ID,
+            2,
+            2.3,
+            12
+        );
+
+    addBox(
+        group,
+        0,
+        0.7,
+        0,
+        3,
+        1.2,
+        3,
+        darkSteel
+    );
+
+    const base =
+        addCylinder(
+            group,
+            0,
+            1.6,
+            0,
+            1.2,
+            1,
+            yellowMaterial,
+            32
+        );
+
+    addBox(
+        group,
+        0,
+        3.2,
+        0,
+        1.1,
+        3.2,
+        1.1,
+        redMaterial
+    );
+
+    const arm =
+        addBox(
+            group,
+            1.4,
+            4.4,
+            0,
+            3.2,
+            0.6,
+            0.6,
+            yellowMaterial
+        );
+
+    arm.rotation.z =
+        -0.35;
+
+    addCylinder(
+        group,
+        3,
+        4.3,
+        0,
+        0.35,
+        1.5,
+        steelMaterial
+    );
+
+    group.userData.robotArm =
+        arm;
+
+    clickableObjects.push(
+        group
+    );
+
+}
+
+
+/* =============================================================
+   HYDRAULIC PRESS
+   ============================================================= */
+
+function createPress(
+    machine
+) {
+
+    const group =
+        machineBase(
+            machine.Machine_ID,
+            29,
+            1.2,
+            12
+        );
+
+    addBox(
+        group,
+        0,
+        1.4,
+        0,
+        7,
+        2.8,
+        5,
+        blueMaterial
+    );
+
+    addBox(
+        group,
+        -2.4,
+        4.2,
+        0,
+        0.65,
+        5,
+        0.65,
+        steelMaterial
+    );
+
+    addBox(
+        group,
+        2.4,
+        4.2,
+        0,
+        0.65,
+        5,
+        0.65,
+        steelMaterial
+    );
+
+    addBox(
+        group,
+        0,
+        6.5,
+        0,
+        5.6,
+        0.7,
+        1,
+        steelMaterial
+    );
+
+    const piston =
+        addCylinder(
+            group,
+            0,
+            4.5,
+            0,
+            0.55,
+            4,
+            yellowMaterial
+        );
+
+    group.userData.piston =
+        piston;
+
+    clickableObjects.push(
+        group
+    );
+
+}
+
+
+/* =============================================================
+   CREATE ALL MACHINES
+   ============================================================= */
+
+machineData.forEach(
+    machine => {
+
+        if (
+            machine.Machine_ID === 1
+        ) {
+            createCNC(machine);
+        }
+
+        else if (
+            machine.Machine_ID === 2
+        ) {
+            createLathe(machine);
+        }
+
+        else if (
+            machine.Machine_ID === 3
+        ) {
+            createMilling(machine);
+        }
+
+        else if (
+            machine.Machine_ID === 5
+        ) {
+            createCompressor(machine);
+        }
+
+        else if (
+            machine.Machine_ID === 6
+        ) {
+            createRobot(machine);
+        }
+
+        else if (
+            machine.Machine_ID === 4
+        ) {
+            createPress(machine);
+        }
+
+    }
+);
+
+
+/* =============================================================
+   CONVEYOR
+   ============================================================= */
+
+const conveyor =
+    new THREE.Group();
+
+conveyor.position.set(
+    0,
+    1.2,
+    2
+);
+
+scene.add(conveyor);
+
+
+addBox(
+    conveyor,
+    0,
+    0,
+    0,
+    20,
+    0.5,
+    3,
+    darkSteel
+);
+
+
+const conveyorParts = [];
+
+
+for (
+    let x = -8;
+    x <= 8;
+    x += 2
+) {
+
+    const roller =
+        addCylinder(
+            conveyor,
+            x,
+            0.55,
+            0,
+            0.45,
+            2.4,
+            steelMaterial,
+            20
+        );
+
+    roller.rotation.z =
+        Math.PI / 2;
+
+    conveyorParts.push(
+        roller
+    );
+
+}
+
+
+/* =============================================================
+   OVERHEAD CRANE
+   ============================================================= */
+
+const crane =
+    new THREE.Group();
+
+scene.add(crane);
+
+
+addBox(
+    crane,
+    0,
+    18,
+    -25,
+    74,
+    0.7,
+    0.8,
+    yellowMaterial
+);
+
+addBox(
+    crane,
+    0,
+    18,
+    25,
+    74,
+    0.7,
+    0.8,
+    yellowMaterial
+);
+
+
+const trolley =
+    new THREE.Group();
+
+trolley.position.set(
+    0,
+    17,
+    0
+);
+
+crane.add(trolley);
+
+
+addBox(
+    trolley,
+    0,
+    0,
+    0,
+    5,
+    0.7,
+    2,
+    yellowMaterial
+);
+
+
+const cable =
+    addBox(
+        trolley,
+        0,
+        -5,
+        0,
+        0.12,
+        10,
+        0.12,
+        darkSteel
+    );
+
+
+const hook =
+    addCylinder(
+        trolley,
+        0,
+        -10,
+        0,
+        0.35,
+        1,
+        yellowMaterial
+    );
+
+
+/* =============================================================
+   STORAGE RACKS
+   ============================================================= */
+
+function createRack(
+    x,
+    z
+) {
+
+    const rack =
+        new THREE.Group();
+
+    rack.position.set(
+        x,
+        0,
+        z
+    );
+
+    scene.add(rack);
+
+
+    for (
+        let level = 0;
+        level < 3;
+        level++
+    ) {
+
+        addBox(
+            rack,
+            0,
+            2 + level * 3,
+            0,
+            7,
+            0.35,
+            2,
+            steelMaterial
+        );
+
+    }
+
+
+    for (
+        const px of [-3.2, 3.2]
+    ) {
+
+        addBox(
+            rack,
+            px,
+            5,
+            0,
+            0.35,
+            10,
+            0.35,
+            steelMaterial
+        );
+
+    }
+
+}
+
+
+createRack(
+    -35,
+    15
+);
+
+createRack(
+    36,
+    -5
+);
+
+
+/* =============================================================
+   BARRELS
+   ============================================================= */
+
+function createBarrel(
+    x,
+    y,
+    z
+) {
+
+    const barrel =
+        addCylinder(
+            scene,
+            x,
+            y + 1.1,
+            z,
+            1,
+            2.2,
+            blueMaterial,
+            24
+        );
+
+    barrel.castShadow =
+        true;
+
+}
+
+
+createBarrel(
+    -35,
+    0,
+    -7
+);
+
+createBarrel(
+    -32,
+    0,
+    -7
+);
+
+createBarrel(
+    36,
+    0,
+    15
+);
+
+
+/* =============================================================
+   TECHNICIANS
+   ============================================================= */
+
+const technicians = [];
+
+
+function createTechnician(
+    x,
+    z,
+    color
+) {
+
+    const person =
+        new THREE.Group();
+
+    person.position.set(
+        x,
+        0,
+        z
+    );
+
+    scene.add(person);
+
+
+    const bodyMaterial =
+        new THREE.MeshStandardMaterial({
+            color: color,
+            roughness: 0.72
+        });
+
+
+    const skinMaterial =
+        new THREE.MeshStandardMaterial({
+            color: 0xb87854,
+            roughness: 0.9
+        });
+
+
+    /* body */
+
+    addBox(
+        person,
+        0,
+        1.7,
+        0,
+        0.9,
+        1.7,
+        0.5,
+        bodyMaterial
+    );
+
+
+    /* head */
+
+    const head =
+        new THREE.Mesh(
+            new THREE.SphereGeometry(
+                0.38,
+                18,
+                18
+            ),
+            skinMaterial
+        );
+
+    head.position.y =
+        2.9;
+
+    head.castShadow =
+        true;
+
+    person.add(head);
+
+
+    /* arms */
+
+    const leftArm =
+        addBox(
+            person,
+            -0.65,
+            1.65,
+            0,
+            0.22,
+            1.25,
+            0.22,
+            bodyMaterial
+        );
+
+    const rightArm =
+        addBox(
+            person,
+            0.65,
+            1.65,
+            0,
+            0.22,
+            1.25,
+            0.22,
+            bodyMaterial
+        );
+
+
+    /* legs */
+
+    const leftLeg =
+        addBox(
+            person,
+            -0.25,
+            0.55,
+            0,
+            0.25,
+            1.1,
+            0.3,
+            darkSteel
+        );
+
+    const rightLeg =
+        addBox(
+            person,
+            0.25,
+            0.55,
+            0,
+            0.25,
+            1.1,
+            0.3,
+            darkSteel
+        );
+
+
+    person.userData =
+    {
+        baseX: x,
+        baseZ: z,
+        leftArm: leftArm,
+        rightArm: rightArm,
+        leftLeg: leftLeg,
+        rightLeg: rightLeg,
+        phase: Math.random() * 10
+    };
+
+
+    technicians.push(
+        person
+    );
+
+}
+
+
+createTechnician(
+    -12,
+    -6,
+    0xf0a500
+);
+
+createTechnician(
+    14,
+    -7,
+    0x1976a8
+);
+
+createTechnician(
+    -8,
+    18,
+    0xc73535
+);
+
+createTechnician(
+    17,
+    19,
+    0xe08b00
+);
+
+
+/* =============================================================
+   SELECTED MACHINE
+   ============================================================= */
+
+let selectedMachineId =
+    null;
+
+let selectedGroup =
+    null;
+
+
+/* =============================================================
+   MACHINE INFO
+   ============================================================= */
+
+function formatDate(
+    value
+) {
+
+    if (!value) {
+        return "-";
+    }
+
+    const date =
+        new Date(value);
+
+    if (
+        Number.isNaN(
+            date.getTime()
+        )
+    ) {
+        return value;
+    }
+
+    return date.toLocaleDateString(
+        "en-IN",
+        {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+        }
+    );
+
+}
+
+
+function formatValue(
+    value,
+    unit
+) {
+
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
+
+        return "-";
+
+    }
+
+    return `${Number(value).toFixed(1)} ${unit}`;
+
+}
+
+
+/* =============================================================
+   SELECT MACHINE
+   ============================================================= */
+
+
+window.selectMachine = function(id) {
+
+    selectedMachineId =
+        Number(id);
+
+    const machine =
+    machineData.find(
+        item =>
+            Number(
+                item.Machine_ID
+            ) === selectedMachineId
+    );
+    if (!machine) {
+        return;
+    }
+    const group = machineGroups[selectedMachineId];
+
+if (group) {
+    const target = new THREE.Vector3();
+    group.getWorldPosition(target);
+
+    const direction = new THREE.Vector3()
+        .subVectors(camera.position, target)
+        .normalize();
+
+    const newCameraPosition = target.clone()
+        .add(direction.multiplyScalar(18));
+
+    camera.position.copy(newCameraPosition);
+    controls.target.copy(target);
+    controls.update();
+}
+
+
+    document
+        .querySelectorAll(
+            ".machine-item"
+        )
+        .forEach(
+            button => {
+
+                button.classList.remove(
+                    "selected"
+                );
+
+            }
+        );
+
+
+    const button =
+        document.getElementById(
+            `machine-button-${selectedMachineId}`
+        );
+
+
+    if (button) {
+
+        button.classList.add(
+            "selected"
+        );
+
+    }
+
+
+    document
+        .getElementById(
+            "selectedMachineName"
+        )
+        .textContent =
+        machine.Machine_Name;
+
+
+    document
+        .getElementById(
+            "selectedMachineType"
+        )
+        .textContent =
+        machine.Machine_Type;
+
+
+    document
+        .getElementById(
+            "machineLocation"
+        )
+        .textContent =
+        machine.Location || "-";
+
+
+    document
+        .getElementById(
+            "machineHours"
+        )
+        .textContent =
+        machine.Operating_Hours ?? "-";
+
+
+    document
+        .getElementById(
+            "machineInstallation"
+        )
+        .textContent =
+        formatDate(
+            machine.Installation_Date
+        );
+
+
+    document
+        .getElementById(
+            "machineTemperature"
+        )
+        .textContent =
+        formatValue(
+            machine.Temperature,
+            "°C"
+        );
+
+
+    document
+        .getElementById(
+            "machineVibration"
+        )
+        .textContent =
+        formatValue(
+            machine.Vibration,
+            "mm/s"
+        );
+
+
+    document
+        .getElementById(
+            "machinePressure"
+        )
+        .textContent =
+        formatValue(
+            machine.Pressure,
+            "bar"
+        );
+
+
+    const status =
+        document.getElementById(
+            "selectedMachineStatus"
+        );
+
+
+    status.className =
+        "machine-status-badge";
+
+
+    const statusText =
+        machine.Status ||
+        "Running";
+
+
+    if (
+        statusText ===
+        "Under Maintenance"
+    ) {
+
+        status.classList.add(
+            "maintenance"
+        );
+
+    }
+
+    else if (
+        statusText ===
+        "Breakdown"
+    ) {
+
+        status.classList.add(
+            "alert"
+        );
+
+    }
+
+    else {
+
+        status.classList.add(
+            "running"
+        );
+
+    }
+
+
+    status.innerHTML =
+        `<span></span>${statusText}`;
+
+
+    if (selectedGroup) {
+
+        selectedGroup.traverse(
+            child => {
+
+                if (
+                    child.material &&
+                    child.material.emissive
+                ) {
+
+                    child.material.emissive.setHex(
+                        0x000000
+                    );
+
+                }
+
+            }
+        );
+
+    }
+
+
+    selectedGroup =
+        machineGroups[
+            selectedMachineId
+        ];
+
+
+    if (selectedGroup) {
+
+        selectedGroup.traverse(
+            child => {
+
+                if (
+                    child.material &&
+                    child.material.emissive
+                ) {
+
+                    child.material.emissive.setHex(
+                        0x174d32
+                    );
+
+                    child.material.emissiveIntensity =
+                        0.8;
+
+                }
+
+            }
+        );
+
+    }
+
+};
+
+
+/* =============================================================
+   CLICK DETECTION
+   ============================================================= */
+
+const raycaster =
+    new THREE.Raycaster();
+
+const mouse =
+    new THREE.Vector2();
+
+
+renderer.domElement.addEventListener(
+    "pointerdown",
+    event => {
+
+        const rect =
+            renderer
+                .domElement
+                .getBoundingClientRect();
+
+
+        mouse.x =
+            (
+                (
+                    event.clientX -
+                    rect.left
+                ) /
+                rect.width
+            ) * 2 - 1;
+
+
+        mouse.y =
+            -(
+                (
+                    event.clientY -
+                    rect.top
+                ) /
+                rect.height
+            ) * 2 + 1;
+
+
+        raycaster.setFromCamera(
+            mouse,
+            camera
+        );
+
+
+        const intersections =
+            raycaster.intersectObjects(
+                clickableObjects,
+                true
+            );
+
+
+        if (
+            intersections.length === 0
+        ) {
+
+            return;
+
+        }
+
+
+        let object =
+            intersections[0].object;
+
+
+        while (
+            object &&
+            !object.userData.machineId
+        ) {
+
+            object =
+                object.parent;
+
+        }
+
+
+        if (
+            object &&
+            object.userData.machineId
+        ) {
+
+            selectMachine(
+                object.userData.machineId
+            );
+
+        }
+
+    }
+);
+
+
+/* =============================================================
+   CAMERA FIT
+   ============================================================= */
+
+function resizeRenderer() {
+
+    const width =
+        container.clientWidth;
+
+    const height =
+        container.clientHeight;
+
+
+    if (
+        width <= 0 ||
+        height <= 0
+    ) {
+
+        return;
+
+    }
+
+
+    camera.aspect =
+        width / height;
+
+    camera.updateProjectionMatrix();
+
+
+    renderer.setSize(
+        width,
+        height,
+        false
+    );
+
+}
+
+
+window.addEventListener(
+    "resize",
+    resizeRenderer
+);
+
+
+/* =============================================================
+   INITIAL CAMERA
+   ============================================================= */
+
+camera.position.set(
+    58,
+    48,
+    62
+);
+
+controls.target.set(
+    0,
+    3,
+    0
+);
+
+controls.update();
+
+
+/* =============================================================
+   INITIAL MACHINE
+   ============================================================= */
+
+if (
+    machineData.length > 0
+) {
+
+    selectMachine(
+        machineData[0].Machine_ID
+    );
+
+}
+
+
+/* =============================================================
+   ANIMATION
+   ============================================================= */
+
+const clock =
+    new THREE.Clock();
+
+
+function animate() {
+
+    requestAnimationFrame(
+        animate
+    );
+
+
+    const elapsed =
+        clock.getElapsedTime();
+
+
+    /* conveyor */
+
+    conveyorParts.forEach(
+        roller => {
+
+            roller.rotation.x +=
+                0.035;
+
+        }
+    );
+
+
+    /* crane */
+
+    const cranePosition =
+        Math.sin(
+            elapsed * 0.35
+        ) * 17;
+
+
+    trolley.position.z =
+        cranePosition;
+
+
+    /* robot */
+
+    const robot =
+        machineGroups[6];
+
+
+    if (robot) {
+
+        if (
+            robot.userData.robotArm
+        ) {
+
+            robot.userData.robotArm.rotation.z =
+                -0.35 +
+                Math.sin(
+                    elapsed * 1.2
+                ) * 0.25;
+
+        }
+
+    }
+
+
+    /* press */
+
+    const press =
+        machineGroups[4];
+
+
+    if (press) {
+
+        if (
+            press.userData.piston
+        ) {
+
+            press.userData.piston.position.y =
+                4.3 +
+                Math.sin(
+                    elapsed * 1.3
+                ) * 0.45;
+
+        }
+
+    }
+
+
+    /* lathe */
+
+    const lathe =
+        machineGroups[2];
+
+
+    if (lathe) {
+
+        lathe.traverse(
+            child => {
+
+                if (
+                    child.userData &&
+                    child.userData.rotating
+                ) {
+
+                    child.rotation.y +=
+                        0.08;
+
+                }
+
+            }
+        );
+
+    }
+
+
+    /* technicians */
+
+    technicians.forEach(
+        (tech, index) => {
+
+            const data =
+                tech.userData;
+
+
+            const movement =
+                Math.sin(
+                    elapsed * 2.2 +
+                    index
+                );
+
+
+            tech.position.x =
+                data.baseX +
+                Math.sin(
+                    elapsed * 0.25 +
+                    index
+                ) * 2.2;
+
+
+            tech.position.z =
+                data.baseZ +
+                Math.cos(
+                    elapsed * 0.25 +
+                    index
+                ) * 1.2;
+
+
+            data.leftLeg.rotation.x =
+                movement * 0.45;
+
+            data.rightLeg.rotation.x =
+                -movement * 0.45;
+
+            data.leftArm.rotation.x =
+                -movement * 0.3;
+
+            data.rightArm.rotation.x =
+                movement * 0.3;
+
+
+            tech.rotation.y =
+                Math.atan2(
+                    Math.cos(
+                        elapsed * 0.25 +
+                        index
+                    ),
+                    Math.sin(
+                        elapsed * 0.25 +
+                        index
+                    )
+                );
+
+        }
+    );
+
+
+    controls.update();
+
+    renderer.render(
+        scene,
+        camera
+    );
+
+}
+
+
+resizeRenderer();
+
+loading.style.display =
+    "none";
+
+animate();
+
+</script>
+
+</body>
+</html>
